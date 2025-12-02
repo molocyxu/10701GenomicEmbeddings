@@ -1,0 +1,324 @@
+\documentclass{article}
+
+
+
+\usepackage{arxiv}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{lipsum}		% Can be removed after putting your text content
+\usepackage{graphicx}
+\usepackage{natbib}
+\usepackage{doi}
+
+
+\title{Predicting Perturbation Effects with Genomic Embeddings}
+
+%\date{September 9, 1985}	% Here you can change the date presented in the paper title
+%\date{} 					% Or removing it
+
+\author{Daniel Thompson \\
+	School of Computer Science\\
+	Carnegie Mellon University\\
+	Pittsburgh, PA 15213 \\
+	\texttt{danielth@andrew.cmu.edu} \\
+	%% examples of more authors
+	\And
+	Litian Liang \\
+	School of Computer Science\\
+    Carnegie Mellon University\\
+	Pittsburgh, PA \\
+	\texttt{litianl@andrew.cmu.edu} \\
+    \And
+	\href{alexzhen@andrew.cmu.edu}{\includegraphics[scale=0.06]{orcid.pdf}\hspace{1mm}Alex Zheng} \\
+	School of Computer Science\\
+	Carnegie Mellon University\\
+	Pittsburgh, PA \\
+	\texttt{alexzhen@andrew.cmu.edu} \\
+	%% \AND
+	%% Coauthor \\
+	%% Affiliation \\
+	%% Address \\
+	%% \texttt{email} \\
+	%% \And
+	%% Coauthor \\
+	%% Affiliation \\
+	%% Address \\
+	%% \texttt{email} \\
+	%% \And
+	%% Coauthor \\
+	%% Affiliation \\
+	%% Address \\
+	%% \texttt{email} \\
+}
+
+% Uncomment to remove the date
+\date{}
+
+% Uncomment to override  the `A preprint' in the header
+\renewcommand{\headeright}{Technical Report}
+\renewcommand{\undertitle}{Technical Report}
+\renewcommand{\shorttitle}{\textit{arXiv} Template}
+
+%%% Add PDF metadata to help others organize their library
+%%% Once the PDF is generated, you can check the metadata with
+%%% $ pdfinfo template.pdf
+\hypersetup{
+pdftitle={A template for the arxiv style},
+pdfsubject={q-bio.NC, q-bio.QM},
+pdfauthor={David S.~Hippocampus, Elias D.~Striatum},
+pdfkeywords={First keyword, Second keyword, More},
+}
+
+\begin{document}
+\maketitle
+\section{Introduction}
+
+We study whether modern genomic foundation model (GFM) embeddings - fixed representations derived from DNA sequence models such as Enformer and the Nucleotide Transformer - can help a standard ML pipeline predict how a cell’s genes change expression when a single transcription factor (TF) is activated using CRISPRa. To do this, we frame TF-response prediction as supervised regression over genes and test whether plug-and-play genomic foundation embeddings meaningfully improve leave-one-TF-out performance over strong linear baselines, ensuring conclusions hold under modern, leakage-resistant evaluation and produce biologically interpretable weight structure.
+\\
+\\
+In simpler terms: in biology, a TF is a protein that binds DNA and turns genes up or down. With CRISPRa (“CRISPR activation”), we can experimentally activate one TF at a time and measure the downstream changes in gene expression using single-cell RNA-seq. These “perturbation screens” are powerful but expensive and mostly cover the specific TFs and cell types that were tested. A central ML challenge is therefore generalization: given a new TF (or a new cellular context), can we predict which genes will go up or down without running a new experiment? 
+\subsection{Research Question} \textbf{We will use embeddings from genomic foundation models (Enformer, Nucleotide Transformer, and peers) as features and train classical and lightweight ML models to predict per-gene expression changes caused by CRISPRa activation of a TF, in order to test whether GFM embeddings improve generalization to unseen TFs beyond strong simple baselines under leakage-resistant evaluation.}
+\\
+\\
+Concretely, for each TF perturbation we will predict a vector of gene-level responses (e.g., delta log-expression vs. control). We will compare Elastic Net, XGBoost, Random Forest, and small neural networks against baselines such as “no change,” global mean-shift, and additive controls. Beyond accuracy, we will analyze learned weights/feature attributions and cluster them to ask whether they recover interpretable biology (e.g., TF families, pathways, regulatory programs).
+\subsection{Scope}
+\begin{itemize}
+	\item Perturbation type: single-TF activations (CRISPRa) only; no knockouts or chemical perturbations.
+	\item Data: a recent large-scale TF-CRISPRa single-cell atlas ($\approx$1–2k TFs across cell types), using the paper’s processed summaries to define ground-truth gene responses.
+	\item Inputs (features): gene-centric sequence embeddings (promoter + enhancers) from GFMs; baseline covariates (pre-perturbation expression, simple annotations); optional motif features for the perturbed TF.
+    \item Outputs (targets): per-gene response vectors and program-level scores.
+    \item Evaluation: strictly leakage-resistant splits (e.g., leave-one-TF-out, cross-cell-type transfer), metrics that discount systematic variation, and paired uncertainty estimates.
+    \item Interpretability: clustering of model weights/attributions and enrichment tests for TF families and pathways.
+    \item Non-goals (for now): end-to-end fine-tuning of GFMs, multi-TF (combinatorial) perturbations, or clinical prediction.
+\end{itemize}
+
+\subsection{Positioning in the field}
+
+Single-cell CRISPR perturbation screens have unlocked systematic tests of how genes and transcription factors (TFs) reshape cellular state, but they are only good for seen cases and generalize poorly when looking at the responses to new perturbations. Existing approaches like CPA and GEARS leverage deep learning and knowledge graphs but show marginal gains over simple baselines under fair evaluation. Recent work reveals critical limitations for these predictions: the Systema framework\citep{vinasTorne2025systema} shows that inflated metrics often reflect "systematic variation" rather than true perturbation-specific effects. A benchmarking paper\citep{ahlmannEltze2025dlbaselines} further demonstrates that simple linear baselines often outperform deep learning models across multiple perturbation tasks, highlighting the importance of careful baseline construction and rigorous evaluation, which includes emphasizing perturbation-specific effects, robust splits, and representation learning matured with GFMs that encode cis-regulatory logic from sequence.
+
+This project uses CRISPRa TF atlas\citep{southard2025tfcrispra} to systematically benchmark whether genomic foundation embeddings improve prediction of TF-induced expression changes beyond simple baselines. Our study is positioned to ask whether off-the-shelf genomic embeddings, paired with carefully evaluated, largely classical ML, can deliver reliable gains on TF-response prediction and yield interpretable patterns aligned with known biology. A positive result would suggest a practical recipe - precompute sequence embeddings, then fit simple models with strict splits - for labs that want credible counterfactuals without heavy model engineering; a negative or null result would be equally informative, reinforcing the need for richer context (chromatin, TF–TF interactions) or alternative objectives.
+
+\section{Related Works}
+\label{sec:related}
+
+\paragraph{Single-cell CRISPR screens as the foundation: Perturb-seq.}
+Perturb-seq \citep{dixit2016perturbseq} introduced pooled CRISPR-based perturbations coupled with single-cell RNA-seq, enabling transcriptional readouts for many gene perturbations in a single experiment. This work established that perturbation responses can be systematically profiled at scale and that expression readouts capture rich regulatory information. Our project assumes Perturb-seq paradigm as the experimental backbone and tackles the predictive question of how to robustly generalize this to unseen perturbations - given such data, can we learn models that extrapolate TF-induced responses beyond what has been directly assayed?
+
+\paragraph{Early deep generative prediction: scGen.}
+scGen \citep{lotfollahi2019scgen} is an early deep-learning method for perturbation response prediction that uses a variational autoencoder with latent space vector arithmetic to model counterfactual single-cell states. It demonstrated that nonlinear latent representations can, in favorable settings, interpolate between observed conditions and predict responses across cell types and studies. Our approach is more conservative than scGen, which is sensitive to train-test splitting and may overfit dataset-specific structure: we do not aim for complex generative modeling of single-cell distributions, but instead test whether fixed genomic embeddings plus transparent predictors can produce reliable TF-level response predictions under deliberately strict splits.
+
+\paragraph{Sequence-based regulatory modeling: Enformer.}
+
+Enformer \citep{avsec2021enformer} showed that deep convolutional-attention architectures operating on long genomic windows can accurately predict regulatory profiles and gene expression from sequence alone, substantially advancing sequence-to-function modeling. Conceptually, Enformer established genomic encoders as reusable feature extractors that embed cis-regulatory context. Our project directly builds on this: we use Enformer-derived gene-centric embeddings as fixed inputs and ask whether standard ML models trained on top of them can capture TF-activation responses, determining of off-the-shelf sequence embeddings actually helpful for perturbation prediction when evaluated rigorously.
+
+\paragraph{Critical benchmarking of deep vs. simple models.}
+\citet{ahlmannEltze2025dlbaselines} systematically compared multiple deep learning and foundation-model-based approaches against deliberately simple linear baselines for predicting gene perturbation effects. Across several tasks-including single and double perturbations-they found that complex models did not reliably outperform well-regularized linear methods, especially under careful, leakage-resistant splits that avoid exploiting dataset-specific artifacts. Therefore, in our design, we frame our main contribution as an empirical test of whether genomic foundation model embeddings (e.g., Enformer features) provide robust, measurable gains in TF-response prediction against strong linear and additive baselines under standard evaluation.
+
+
+\paragraph{A modern evaluation doctrine: Systema.}
+Systema \citep{vinasTorne2025systema} showed that most apparent performance in perturbation prediction can be explained by ``systematic variation'' rather than true perturbation-specific signal, and introduced perturbation-specific, leakage-resistant evaluation protocols to correctly isolate generalization. This paper essentially set the modern evaluation regime (e.g.\ holding out entire perturbations) - and our project explicitly uses this to ensure that any gains from genomic embeddings reflect true TF-response predictivity rather than dataset artifacts.
+
+\paragraph{Summary.}
+% Taken together, \citet{dixit2016perturbseq} established scalable perturbation measurements, \citet{lotfollahi2019scgen} introduced deep generative
+% perturbation predictors, \citet{avsec2021enformer} provided powerful sequence-level encoders, \citet{southard2025tfcrispra} supplied a uniquely rich TF activation dataset, and \citet{ahlmannEltze2025dlbaselines} raised the bar on how methods must be benchmarked. Our work sits at the intersection of these developments: using the CRISPRa TF atlas, we train simple and lightweight models on top of Enformer-style embeddings, and we evaluate them against strong baselines in the critical spirit of \citet{ahlmannEltze2025dlbaselines}, thereby asking whether genomic foundation embeddings meaningfully and reliably improve TF perturbation effect prediction beyond what classical methods already achieve.
+
+Taken together, \citet{dixit2016perturbseq} established scalable perturbation measurements, \citet{lotfollahi2019scgen} introduced deep generative
+perturbation predictors, \citet{avsec2021enformer} provided powerful sequence-level encoders, \citet{southard2025tfcrispra} supplied a uniquely rich TF activation dataset, \citet{ahlmannEltze2025dlbaselines} raised the bar on how methods must be benchmarked, and \citet{vinasTorne2025systema} formalized how to evaluate perturbation prediction under leakage-resistant, perturbation-specific metrics. Our work sits at the intersection of these developments: using the CRISPRa TF atlas, we train simple and lightweight models on top of Enformer-style embeddings, and we evaluate them against strong baselines in the critical spirit of \citet{ahlmannEltze2025dlbaselines} and \citet{vinasTorne2025systema}, thereby asking whether genomic foundation embeddings meaningfully and reliably improve TF perturbation effect prediction beyond what classical methods already achieve.
+
+\section{Proposed Baselines and Methods}
+
+The baselines (B0-B3) reproduce the strongest simple controls recommended by recent benchmarking,
+and the primary proposed method (M1) directly tests whether \emph{GFM embeddings paired with classical
+linear models} improve LOTO and cross-context performance. Nonlinear methods (M2-M4) are included as
+capacity-controlled comparators and to probe expert specialization (interpretability objective).
+All evaluation follows Systema-style perturbation-specific metrics and strict splits, and qualitative
+review is limited to biological plausibility checks-no human-subjects data are collected.
+
+\paragraph{Problem Setup.}
+For each TF activation (CRISPRa) perturbation $p$, the task is to predict a per-gene response vector
+$y_p \in \mathbb{R}^{G}$ (e.g., $\Delta$log-expression relative to matched controls) across a fixed gene set $G$
+(1-5k highly expressed/variable genes). Inputs are gene-centric features that include genomic
+foundation model (GFM) embeddings derived from DNA sequence around each gene plus simple covariates
+(e.g., baseline expression). We evaluate generalization to \emph{unseen TFs} and \emph{new cellular contexts}
+using leakage-resistant splits consistent with Systema-style guidance.
+
+\subsection{Datasets and Features}
+
+\noindent\textbf{Primary dataset.}
+We will use the TF CRISPRa Perturb-seq resource (``CRISPRa TF atlas''): $\sim$1{,}836 TF activations across two cell types with single-cell RNA-seq readouts and processed guide-level summaries. We will use the authors' processed pseudo-bulk or per-guide aggregates to define $y_p$; gene identifiers will be harmonized (Ensembl IDs) and intersected across resources.
+
+\medskip\noindent\textbf{Gene set.}
+We will build targets on (i) a fixed panel of $G{=}$2{,}000-5{,}000 highly expressed/variable genes and
+(ii) optional program-level scores (module eigengenes) to reduce noise and enable pathway-level evaluation.
+
+\medskip\noindent\textbf{Sequence-derived embeddings (core features).}
+\begin{itemize}
+  \item \emph{Enformer:} extract representations/predictions from windows centered at TSS (e.g., $\pm$5\,kb promoter) and expanded regulatory context (promoter{+}putative enhancers; exploratory $\pm$100\,kb). Pooling: mean-pool and/or learned PCA over token-level embeddings.
+  \item \emph{Nucleotide Transformer (NT):} obtain token/CLS embeddings over the same windows; compare mean/CLS pooling and multi-scale concatenation.
+\end{itemize}
+All sequence embeddings will be precomputed and cached in a feature store keyed by gene.
+
+\medskip\noindent\textbf{Auxiliary covariates (ablation-controlled).}
+Baseline control expression (per gene), simple annotations (gene length, GC), optional TF-motif occupancy
+scores near each gene (PWM scan or available motif tracks), and TF metadata (family label one-hot).
+These let us quantify incremental value of GFM embeddings over inexpensive covariates.
+
+\subsection{Baseline Methods}
+
+\noindent\textbf{B0: No-change.}
+Predict $y_p = 0$ for all genes (i.e., control-level expression). Serves as a lower bound and a useful
+calibration reference under centered metrics.
+
+\noindent\textbf{B1: Global mean-shift.}
+Estimate a perturbation-specific intercept $\hat{\mu}_p$ from training TFs in the same batch/panel and
+predict $y_p = \hat{\mu}_p \mathbf{1}$; captures systematic variation but no gene specificity.
+
+\noindent\textbf{B2: Additive control (panel-level).}
+Predict $y_p$ as the average response of ``similar'' TFs in the training set (e.g., within the same TF
+family or batch), excluding any target leakage. This reproduces the simple, yet competitive, additive
+controls emphasized in recent benchmarks.
+
+\noindent\textbf{B3: Elastic Net (covariates-only).}
+Linear regression with $\ell_1{+}\ell_2$ penalties using only non-sequence covariates. This isolates the
+benefit of sequence embeddings.
+
+\subsection{Proposed Methods}
+
+\noindent\textbf{M1: Elastic Net on GFM embeddings (primary proposed method).}
+Concatenate Enformer and NT embeddings (with optional dimensionality reduction via PCA preserving
+$\geq$95\% variance) plus covariates, and fit an Elastic Net per gene (multi-output variant with shared
+hyperparameters via nested cross-validation). This tests the core hypothesis that \emph{pretrained
+sequence embeddings + simple linear models} improve generalization under strict splits.
+
+\noindent\textbf{M2: Tree Ensembles on GFM embeddings.}
+XGBoost and Random Forest on the same feature set to capture moderate non-linearities. SHAP values will
+provide feature importance for interpretability checks.
+
+\noindent\textbf{M3: Lightweight MLP (nonlinear control).}
+A 2-3 layer MLP with layer widths 256-512, GELU activations, dropout 0.1-0.2, weight decay, and early
+stopping. Serves as a capacity-controlled nonlinear comparator.
+
+\subsection{Evaluation Protocol}
+
+\noindent\textbf{Splits (leakage-resistant).}
+\begin{itemize}
+  \item \textit{Leave-One-TF-Out (LOTO):} hold out entire TFs at test time.
+  \item \textit{Cross-context transfer:} train on cell type A, test on cell type B (and vice versa).
+  \item \textit{Family holdout (stress test):} hold out all TFs from a given TF family.
+\end{itemize}
+Guide-level and batch/panel stratification will be enforced to avoid leakage from systematic variation.
+
+\medskip\noindent\textbf{Primary metrics.}
+Pearson correlation and RMSE on centered, perturbation-specific effects (Systema-style de-meaning),
+reported per held-out TF and summarized with paired bootstrap confidence intervals across TFs.
+Secondary: MAE; gene set recovery (AUROC/AUPRC for curated DE gene sets or pathway modules);
+calibration (slope/intercept).
+
+\medskip\noindent\textbf{Sanity checks.}
+Label shuffling within batches (metrics should collapse to near-B0); training-only ablations removing
+sequence features (to quantify added value of GFMs).
+
+\subsection{Interpretability and Qualitative Analysis}
+
+\noindent\textbf{Weights/attributions.}
+For Elastic Net/XGBoost, collect per-gene coefficients/importances; for MLP, use Integrated Gradients or SHAP.
+Cluster TFs by these weight profiles; compute enrichment for TF families and biological pathways (GO/KEGG).
+We will summarize with silhouette scores and pathway overrepresentation $p$-values (Benjamini–Hochberg FDR).
+
+\noindent\textbf{Qualitative review (human-in-the-loop).}
+Domain-informed inspection of top-weighted genes for selected TFs (e.g., KLF2/KLF4, inflammatory
+regulators), checking agreement with known programs from the CRISPRa atlas. This is \emph{non-sensitive}
+expert judgement only; no human subjects or annotation collection.
+
+\subsection{Implementation Details}
+
+\noindent\textbf{Environment.}
+Python~3.11; \texttt{pandas}, \texttt{numpy}, \texttt{scikit-learn} (Elastic Net, RF), \texttt{xgboost},
+\texttt{pytorch}+\texttt{lightning} (MLP), \texttt{scanpy}/\texttt{anndata} (if single-cell matrices are used),
+\texttt{pyfaidx}/\texttt{pybedtools} (sequence windowing), and available Enformer/NT model hubs for embedding extraction.
+Hydra/YAML configs for reproducibility; seed control and deterministic dataloaders.
+
+\medskip\noindent\textbf{Feature store.}
+All per-gene embeddings cached to disk (Parquet/HDF5) with versioned provenance (genome build, window sizes,
+pooling method). Optional PCA fit on training splits only to prevent leakage.
+
+\medskip\noindent\textbf{Hyperparameters.}
+Elastic Net: grid over $\alpha \in \{10^{-4}\ldots 10^2\}$ and $\ell_1$-ratio $\in [0,1]$ with nested CV.
+XGBoost: depth 4-8, learning rate 0.03-0.2, subsample/colsample 0.6-1.0; early stopping on validation TFs.
+MLP: 100-300 epochs with early stopping; cosine LR schedule; weight decay $10^{-5}$.
+
+
+\section{Current Progress}
+To do:
+\begin{itemize}
+    \item Download/otherwise configure the dataset for use in the project - Daniel working on this, to be done by Nov. 12
+    \item Initial setup for shared github repository, python environment, and integration into AWS
+    \item Create/run initial baseline ("No-change") model - should be runnable "end-to-end" in AWS by 11/19
+    \item Create/run other baseline + ML models by 11/25
+    \item Gather results re: performance and interpretability, and compile in final write-up by final due date of 12/5
+\end{itemize}
+% In this section, please describe where you currently are in the project process. Some examples of this are
+% (1) a checklist that describes things that have been done and things that are yet to be done, (2) who in your
+% team is working on each task, (3) a timeline with specific milestones, or (4) one or two paragraphs
+% describing the current progress. We also ask that you share the github link to your repository in this
+% section.
+
+\paragraph{Github repository.} https://github.com/molocyxu/10701GenomicEmbeddings
+
+\bibliographystyle{unsrtnat}
+\bibliography{references}  
+%%% Uncomment this line and comment out the ``thebibliography'' section below to use the external .bib file (using bibtex) .
+
+
+% Uncomment this section and comment out the \bibliography{references} line above to use inline references.
+% \begin{thebibliography}{1}
+
+% \bibitem{dixit2016perturbseq}
+% Atray Dixit, Oren Parnas, Biyu Li, Jenny Chen, Charles~P. Fulco, Liran Jerby-Arnon,
+% Nir~D. Marjanovic, David Dionne, Tahlia Burks, Rohit Raychowdhury, Bernhard Adamson,
+% Tomas~M. Norman, Eric~S. Lander, Jonathan~S. Weissman, Nir Friedman, and Aviv Regev.
+% \newblock Perturb-Seq: Dissecting molecular circuits with scalable single-cell RNA profiling of pooled genetic screens.
+% \newblock {\em Cell}, 167(7):1853-1866.e17, 2016.
+
+% \bibitem{lotfollahi2019scgen}
+% Mohammad Lotfollahi, Francesc~A. Wolf, and Fabian~J. Theis.
+% \newblock scGen predicts single-cell perturbation responses.
+% \newblock {\em Nature Methods}, 16:715-721, 2019.
+
+% \bibitem{avsec2021enformer}
+% {\v{Z}}iga Avsec, Vikram Agarwal, Davide Visentin, et~al.
+% \newblock Effective gene expression prediction from sequence by integrating long-range interactions.
+% \newblock {\em Nature Methods}, 18:1196-1203, 2021.
+
+% \bibitem{southard2025tfcrispra}
+% Kaden~M. Southard, Rico~C. Ardy, Andrew Tang, et~al.
+% \newblock Comprehensive transcription factor perturbations recapitulate fibroblast transcriptional states.
+% \newblock {\em Nature Genetics}, 57:2323-2334, 2025.
+
+% \bibitem{ahlmannEltze2025dlbaselines}
+% Constantin Ahlmann-Eltze, Wolfgang Huber, and Simon Anders.
+% \newblock Deep-learning-based gene perturbation effect prediction does not yet outperform simple linear baselines.
+% \newblock {\em Nature Methods}, 22:1657-1661, 2025.
+
+% \bibitem{vinasTorne2025systema}
+% R. Vi{\~n}as Torn{\'e}, M. Wiatrak, Z. Piran, et~al.
+% \newblock Systema: a framework for evaluating genetic perturbation response prediction beyond systematic variation.
+% \newblock {\em Nature Biotechnology}, 2025.
+
+% \bibitem{dallaTorre2025nucleotideTransformer}
+% H. Dalla-Torre, L. Gonzalez, J. Mendoza-Revilla, et~al.
+% \newblock Nucleotide Transformer: building and evaluating robust foundation models for human genomics.
+% \newblock {\em Nature Methods}, 22:287-297, 2025.
+
+
+% \end{thebibliography}
+
+
+\end{document}

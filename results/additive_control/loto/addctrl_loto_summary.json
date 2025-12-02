@@ -1,0 +1,12 @@
+{
+  "pearson_per_pert": null,
+  "pearson_mean": -0.29252801923709054,
+  "rmse_per_pert": null,
+  "rmse_mean": 0.10387117829334944,
+  "mae_per_pert": null,
+  "mae_mean": 0.07981202931632038,
+  "mse_per_pert": null,
+  "mse_mean": 0.01178233459977491,
+  "raw_mse_per_pert": null,
+  "raw_mse_mean": 0.011950700373958293
+}

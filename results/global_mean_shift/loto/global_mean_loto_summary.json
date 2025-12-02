@@ -1,0 +1,18 @@
+{
+  "pearson_per_pert": null,
+  "pearson_mean": 0.0,
+  "rmse_per_pert": null,
+  "rmse_mean": 0.10381553367827921,
+  "mae_per_pert": null,
+  "mae_mean": 0.07976953118703453,
+  "mse_per_pert": null,
+  "mse_mean": 0.011769541919886798,
+  "raw_mse_per_pert": null,
+  "raw_mse_mean": 0.011937907694070181,
+  "raw_pearson_per_pert": null,
+  "raw_pearson_mean": 2.0118843707689358e-19,
+  "raw_rmse_per_pert": null,
+  "raw_rmse_mean": 0.10457572072456346,
+  "raw_mae_per_pert": null,
+  "raw_mae_mean": 0.08043290364437597
+}
