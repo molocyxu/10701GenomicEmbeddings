@@ -29,12 +29,24 @@ def load_artifacts(art_dir: str = 'artifacts'):
     art = Path(art_dir)
     gi = art / 'gene_index.txt'
     targets = art / 'targets.parquet'
+    tf_emb = art / 'tf_embeddings.parquet'
+    
     if not gi.exists() or not targets.exists():
         raise FileNotFoundError('Expected artifacts: gene_index.txt and targets.parquet in artifacts/')
+    
     gene_index = [x.strip() for x in gi.read_text().splitlines() if x.strip()]
     Y = pd.read_parquet(targets)
     Y = Y.reindex(columns=gene_index)
-    return gene_index, Y
+    
+    # Load TF embeddings if available
+    tf_embeddings = None
+    if tf_emb.exists():
+        tf_embeddings = pd.read_parquet(tf_emb)
+        logging.info(f"Loaded TF embeddings shape: {tf_embeddings.shape}")
+    else:
+        logging.info("TF embeddings not found; proceeding without them")
+    
+    return gene_index, Y, tf_embeddings
 
 
 def load_perturbation_meta(h5ad_path: str = 'data/Hs27_fibroblast_CRISPRa_mean_pop.h5ad') -> pd.DataFrame:
@@ -167,8 +179,10 @@ def run_additive_control(out_dir: str = 'results/additive_control'):
     out.mkdir(parents=True, exist_ok=True)
 
     logging.info('Loading artifacts')
-    gene_index, Y_df = load_artifacts()
+    gene_index, Y_df, tf_embeddings = load_artifacts()
     logging.info(f'Loaded targets shape: {Y_df.shape}')
+    if tf_embeddings is not None:
+        logging.info(f'Loaded TF embeddings shape: {tf_embeddings.shape}')
 
     meta_df = load_perturbation_meta()
 

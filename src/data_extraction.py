@@ -5,6 +5,7 @@ Produces the following artifacts in `artifacts/`:
 - `gene_index.txt` : canonical ordered list of gene_ids
 - `targets.parquet` : per-perturbation pseudo-bulk deltas (P x G)
 - `covariates.parquet` : per-gene covariates (baseline expression, gc, seq_length)
+- `tf_embeddings.parquet` : TF embeddings (P x 512) for each perturbation, indexed by perturbation_id
 
 Usage: run as a script or call main() from notebooks.
 """
@@ -132,7 +133,104 @@ def compute_covariates(seq_df: pd.DataFrame, baseline_expression: pd.Series) -> 
     return df
 
 
-def save_artifacts(gene_index, Y: pd.DataFrame, covariates: pd.DataFrame, out_dir: str = 'artifacts'):
+def load_tf_embeddings(nt_emb_dir='data/NT-v2-50m', tf_seq_csv='data/tf_sequences.csv'):
+    """
+    Load TF embeddings and map them to perturbation IDs.
+    
+    Returns:
+        tf_emb_dict: dict mapping TF gene_id -> embedding (1D array, shape (512,))
+    """
+    logger = logging.getLogger(__name__)
+    
+    # Load NT embeddings
+    nt_dir = Path(nt_emb_dir)
+    tf_emb_file = nt_dir / 'NTv2_50m_tf_embeddings.npy'
+    tf_ids_file = nt_dir / 'NTv2_50m_tf_ids.npy'
+    
+    if not tf_emb_file.exists() or not tf_ids_file.exists():
+        logger.warning(f"TF embeddings not found in {nt_emb_dir}. Skipping TF embeddings.")
+        return {}
+    
+    tf_embeddings = np.load(str(tf_emb_file))  # shape (n_tf, 512)
+    tf_ids = np.load(str(tf_ids_file), allow_pickle=True)  # shape (n_tf,)
+    
+    logger.info(f"Loaded {len(tf_ids)} TF embeddings from {nt_emb_dir}")
+    
+    # Create mapping: gene_id -> embedding
+    tf_emb_dict = {str(tid): emb for tid, emb in zip(tf_ids, tf_embeddings)}
+    
+    return tf_emb_dict
+
+
+def map_tf_embeddings_to_perturbations(Y: pd.DataFrame, adata, tf_emb_dict: dict, group_col_candidates=None) -> pd.DataFrame:
+    """
+    Map TF embeddings to each perturbation ID based on the perturbed gene.
+    
+    Returns:
+        tf_emb_df: DataFrame with index=perturbation_id, columns=embedding_dim (512)
+    """
+    logger = logging.getLogger(__name__)
+    
+    if not tf_emb_dict:
+        logger.info("No TF embeddings provided; returning empty DataFrame")
+        return pd.DataFrame()
+    
+    if group_col_candidates is None:
+        group_col_candidates = ['perturbation', 'perturbation_id', 'target', 'target_gene', 'guide']
+    
+    obs = adata.obs
+    group_col = None
+    for c in group_col_candidates:
+        if c in obs.columns:
+            group_col = c
+            break
+    
+    if group_col is None:
+        logger.warning('No perturbation column found; cannot map TF embeddings')
+        return pd.DataFrame()
+    
+    # Try to identify target gene column
+    target_col = None
+    target_col_candidates = ['target', 'target_gene', 'target_id', 'guide_target']
+    for c in target_col_candidates:
+        if c in obs.columns:
+            target_col = c
+            break
+    
+    if target_col is None:
+        logger.warning('No target gene column found; cannot map TF embeddings')
+        return pd.DataFrame()
+    
+    # Build mapping: perturbation_id -> target_gene_id
+    pert_to_target = obs.groupby(group_col)[target_col].first()
+    
+    # Map embeddings
+    tf_emb_data = []
+    pert_ids = []
+    
+    for pert_id in Y.index:
+        if pert_id not in pert_to_target.index:
+            logger.debug(f"Perturbation {pert_id} not in metadata; skipping")
+            continue
+        
+        target_gene = str(pert_to_target[pert_id])
+        if target_gene in tf_emb_dict:
+            tf_emb_data.append(tf_emb_dict[target_gene])
+            pert_ids.append(pert_id)
+        else:
+            logger.debug(f"Target gene {target_gene} not in TF embeddings dict")
+    
+    if len(tf_emb_data) == 0:
+        logger.warning("No TF embeddings could be mapped to perturbations")
+        return pd.DataFrame()
+    
+    tf_emb_df = pd.DataFrame(np.vstack(tf_emb_data), index=pert_ids)
+    logger.info(f"Mapped {len(tf_emb_df)} / {len(Y)} perturbations to TF embeddings")
+    
+    return tf_emb_df
+
+
+def save_artifacts(gene_index, Y: pd.DataFrame, covariates: pd.DataFrame, tf_emb_df: pd.DataFrame = None, out_dir: str = 'artifacts'):
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
@@ -147,10 +245,17 @@ def save_artifacts(gene_index, Y: pd.DataFrame, covariates: pd.DataFrame, out_di
     cov_path = out / 'covariates.parquet'
     covariates.to_parquet(cov_path)
 
-    print(f"Saved gene_index ({len(gene_index)}), targets -> {targets_path}, covariates -> {cov_path}")
+    msg = f"Saved gene_index ({len(gene_index)}), targets -> {targets_path}, covariates -> {cov_path}"
+    
+    if tf_emb_df is not None and len(tf_emb_df) > 0:
+        tf_emb_path = out / 'tf_embeddings.parquet'
+        tf_emb_df.to_parquet(tf_emb_path)
+        msg += f", tf_embeddings -> {tf_emb_path}"
+    
+    print(msg)
 
 
-def main(h5ad_path='data/Hs27_fibroblast_CRISPRa_mean_pop.h5ad', seq_csv='data/Hs27_gene_sequences_12kb_4912genes.csv', out_dir='artifacts'):
+def main(h5ad_path='data/Hs27_fibroblast_CRISPRa_mean_pop.h5ad', seq_csv='data/Hs27_gene_sequences_12kb_4912genes.csv', out_dir='artifacts', nt_emb_dir='data/NT-v2-50m'):
     logging.info(f"Loading AnnData from {h5ad_path}")
     adata = load_adata(h5ad_path)
     logging.info(f"Loading sequences from {seq_csv}")
@@ -165,8 +270,14 @@ def main(h5ad_path='data/Hs27_fibroblast_CRISPRa_mean_pop.h5ad', seq_csv='data/H
     logging.info("Computing covariates (GC, seq length, baseline expression)")
     covariates = compute_covariates(seq_df[seq_df['gene_id'].isin(gene_index)].copy(), baseline)
 
+    logging.info("Loading TF embeddings from NT-v2-50m")
+    tf_emb_dict = load_tf_embeddings(nt_emb_dir=nt_emb_dir)
+    
+    logging.info("Mapping TF embeddings to perturbations")
+    tf_emb_df = map_tf_embeddings_to_perturbations(Y, adata, tf_emb_dict)
+
     logging.info(f"Saving artifacts to {out_dir}")
-    save_artifacts(gene_index, Y, covariates, out_dir=out_dir)
+    save_artifacts(gene_index, Y, covariates, tf_emb_df=tf_emb_df, out_dir=out_dir)
 
 
 if __name__ == '__main__':
