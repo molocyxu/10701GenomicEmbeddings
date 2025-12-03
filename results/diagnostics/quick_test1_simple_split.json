@@ -1,0 +1,9 @@
+{
+  "test": "simple_split",
+  "n_samples": 500,
+  "n_genes": 20,
+  "mean_pearson": NaN,
+  "std_pearson": NaN,
+  "min_pearson": NaN,
+  "max_pearson": NaN
+}

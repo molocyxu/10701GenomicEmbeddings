@@ -151,7 +151,13 @@ def main(targets_path='artifacts/targets.parquet',
     emb_df = build_tf_embedding_matrix(pert_to_tf_id, tf_ids, tf_embeddings, Y.index)
     
     logger.info(f"Saving to {out_path}")
-    emb_df.to_parquet(out_path)
+    # Save as .npz (numpy compressed) to avoid parquet corruption issues
+    if out_path.endswith('.parquet'):
+        npz_path = out_path.replace('.parquet', '.npz')
+        np.savez_compressed(npz_path, data=emb_df.values, index=emb_df.index.values, columns=emb_df.columns.values)
+        logger.info(f"Saved as numpy: {npz_path}")
+    else:
+        np.savez_compressed(out_path, data=emb_df.values, index=emb_df.index.values, columns=emb_df.columns.values)
     
     logger.info("Done!")
 

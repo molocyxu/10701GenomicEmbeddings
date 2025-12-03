@@ -1,0 +1,8 @@
+{
+  "test": "shuffled_features",
+  "n_samples": 500,
+  "n_genes": 20,
+  "mean_pearson_real": NaN,
+  "mean_pearson_noise": -0.019769287112981704,
+  "difference": NaN
+}

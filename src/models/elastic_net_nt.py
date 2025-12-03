@@ -27,9 +27,10 @@ SRC = ROOT / 'src'
 sys.path.insert(0, str(SRC))
 
 from evaluation import evaluation as evalmod
-from joblib import Parallel, delayed
 from sklearn.linear_model import ElasticNetCV
 from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import StandardScaler
+from utils import parquet_utils
 
 
 def centered_pearson(x, y):
@@ -43,24 +44,47 @@ def centered_pearson(x, y):
     return float(num / den)
 
 
-def fit_predict_gene(X_train, y_train, X_test, alphas=None, l1_ratio=[0.1, 0.5, 0.9, 1.0], max_iter=5000):
-    # if y_train is constant, return that constant
+def fit_predict_gene(X_train, y_train, X_test, alphas=None, l1_ratio=[0.5, 1.0], max_iter=2000, tol=1e-2):
+    # ElasticNetCV requires finite arrays; filter out NaN in both X and y
     if np.all(np.isnan(y_train)):
         return np.nan
-    if np.nanstd(y_train) == 0:
-        return float(np.nanmean(y_train))
-    # ElasticNetCV requires finite array
-    mask = ~np.isnan(y_train)
-    if mask.sum() < 5:
+    
+    # Find samples with valid y and valid X (all embedding dimensions)
+    y_valid_mask = ~np.isnan(y_train)
+    X_valid_mask = ~np.isnan(X_train).any(axis=1)
+    combined_mask = y_valid_mask & X_valid_mask
+    
+    if combined_mask.sum() < 5:
         # not enough samples
-        return float(np.nanmean(y_train))
+        return float(np.nanmean(y_train[y_valid_mask])) if y_valid_mask.sum() > 0 else np.nan
+    
+    X_train_clean = X_train[combined_mask]
+    y_train_clean = y_train[combined_mask]
+    
+    if np.std(y_train_clean) == 0:
+        return float(np.mean(y_train_clean))
+    
+    # Handle X_test: if it has NaNs, impute with mean from training set
+    X_test_clean = X_test.copy().reshape(1, -1)
+    for j in range(X_test_clean.shape[1]):
+        if np.isnan(X_test_clean[0, j]):
+            X_test_clean[0, j] = np.nanmean(X_train[:, j])
+    
     try:
-        model = ElasticNetCV(alphas=alphas, l1_ratio=l1_ratio, cv=5, max_iter=max_iter, n_jobs=1)
-        model.fit(X_train[mask], y_train[mask])
-        pred = model.predict(X_test.reshape(1, -1))[0]
+        # Standardize features for better regularization behavior
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train_clean)
+        X_test_scaled = scaler.transform(X_test_clean)
+        
+        # Fit ElasticNetCV with tighter convergence to avoid long stalls
+        model = ElasticNetCV(alphas=alphas, l1_ratio=l1_ratio, cv=5, max_iter=max_iter,
+                     n_jobs=1, tol=tol, warm_start=False, verbose=0)
+        model.fit(X_train_scaled, y_train_clean)
+        pred = model.predict(X_test_scaled)[0]
         return float(pred)
-    except Exception:
-        return float(np.nanmean(y_train))
+    except Exception as e:
+        # Fallback to training mean; log exceptions if desired
+        return float(np.mean(y_train_clean))
 
 
 def main(max_genes=None, n_jobs=4):
@@ -68,8 +92,10 @@ def main(max_genes=None, n_jobs=4):
     os.makedirs(out_dir, exist_ok=True)
 
     # Load data
-    tf_emb = pd.read_parquet('artifacts/tf_embeddings.parquet')
-    targets = pd.read_parquet('artifacts/targets.parquet')
+    print("Loading TF embeddings...", flush=True)
+    tf_emb = parquet_utils.read_tf_embeddings('artifacts/tf_embeddings.parquet')
+    print("Loading targets...", flush=True)
+    targets = parquet_utils.read_targets('artifacts/targets.parquet')
 
     # Align
     common_idx = tf_emb.index.intersection(targets.index)
@@ -89,7 +115,8 @@ def main(max_genes=None, n_jobs=4):
     X = tf_emb.values.astype(float)  # shape (P, D)
     Y = targets[genes].values.astype(float)  # shape (P, G)
 
-    alphas = np.logspace(-4, 2, 20)
+    # Reduce alpha grid for faster CV
+    alphas = np.logspace(-3, 1, 12)
 
     # Prepare storage
     preds = np.zeros_like(Y)
@@ -111,11 +138,47 @@ def main(max_genes=None, n_jobs=4):
             results.append(pred)
         return np.array(results)
 
-    print(f"Running LOTO on {P} perturbations, {G} genes, embedding dim {X.shape[1]}")
-    # parallel over holdouts
-    outputs = Parallel(n_jobs=min(n_jobs, P))(delayed(process_holdout)(i) for i in range(P))
+    print(f"Running LOTO on {P} perturbations, {G} genes, embedding dim {X.shape[1]}", flush=True)
+    print(f"Running sequentially (no parallelization)", flush=True)
+    
+    # Sequential loop over holdouts with progress tracking
     for i in range(P):
-        preds[i, :] = outputs[i]
+        # Heartbeat: starting new perturbation
+        print(f"Starting perturbation {i+1}/{P}: {perturbs[i]}", flush=True)
+        # Train on all except i_holdout
+        mask = np.ones(P, dtype=bool)
+        mask[i] = False
+        X_train = X[mask]
+        X_test = X[i]
+        Y_train = Y[mask]
+
+        # For each gene, fit and predict
+        results = []
+        for j in range(G):
+            yj = Y_train[:, j]
+            pred = fit_predict_gene(X_train, yj, X_test, alphas=alphas)
+            results.append(pred)
+            # Inner-loop progress every ~5%
+            if (j + 1) % max(1, G // 20) == 0 or j == G - 1:
+                print(f"  Gene progress: {j+1}/{G} for perturbation {perturbs[i]}", flush=True)
+        
+        preds[i, :] = np.array(results)
+        # Checkpoint partial predictions for the completed perturbation
+        try:
+            partial_dir = Path(out_dir) / 'partial'
+            partial_dir.mkdir(parents=True, exist_ok=True)
+            pd.DataFrame([preds[i, :]], index=[perturbs[i]], columns=genes).to_parquet(
+                partial_dir / f'preds_{i:04d}.parquet'
+            )
+            print(f"Checkpoint written: {partial_dir / f'preds_{i:04d}.parquet'}", flush=True)
+        except Exception:
+            # Non-fatal if checkpoint fails
+            pass
+        
+        if (i + 1) % max(1, P // 10) == 0 or i == P - 1:
+            print(f"Progress: {i+1}/{P} perturbations completed", flush=True)
+    
+    print(f"LOTO completed", flush=True)
 
     preds_df = pd.DataFrame(preds, index=perturbs, columns=genes)
     preds_df.to_parquet(os.path.join(out_dir, 'predictions.parquet'))
@@ -174,6 +237,10 @@ def main(max_genes=None, n_jobs=4):
 
 
 if __name__ == '__main__':
+    # Disable output buffering
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, write_through=True)
+    
     parser = argparse.ArgumentParser()
     parser.add_argument('--max-genes', type=int, default=None, help='Limit number of genes for a fast smoke test')
     parser.add_argument('--n-jobs', type=int, default=4)

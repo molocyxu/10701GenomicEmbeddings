@@ -18,6 +18,7 @@ SRC = ROOT / 'src'
 sys.path.insert(0, str(SRC))
 
 from evaluation import evaluation as evalmod
+from utils import parquet_utils
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 
@@ -32,17 +33,17 @@ def load_artifacts(art_dir: str = 'artifacts'):
         raise FileNotFoundError('Expected artifacts: gene_index.txt and targets.parquet in artifacts/')
     
     gene_index = [x.strip() for x in gi.read_text().splitlines() if x.strip()]
-    Y = pd.read_parquet(targets)
+    Y = parquet_utils.read_targets(targets)
     # ensure columns order
     Y = Y.reindex(columns=gene_index)
     
     # Load TF embeddings if available
     tf_embeddings = None
-    if tf_emb.exists():
-        tf_embeddings = pd.read_parquet(tf_emb)
+    try:
+        tf_embeddings = parquet_utils.read_tf_embeddings(tf_emb)
         logging.info(f"Loaded TF embeddings shape: {tf_embeddings.shape}")
-    else:
-        logging.info("TF embeddings not found; proceeding without them")
+    except Exception as e:
+        logging.info(f"TF embeddings not found; proceeding without them: {e}")
     
     return gene_index, Y, tf_embeddings
 

@@ -1,0 +1,9 @@
+{
+  "test": "high_variance_genes",
+  "n_samples": 500,
+  "n_high_var_genes": 20,
+  "n_random_genes": 20,
+  "mean_pearson_high_var": 0.029562877365413565,
+  "mean_pearson_random": NaN,
+  "improvement": NaN
+}

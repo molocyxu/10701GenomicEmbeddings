@@ -1,7 +1,7 @@
 {
-  "mean_centered_pearson": -0.30416547255484844,
-  "mean_raw_mse": 0.011175816335128307,
-  "mean_centered_rmse": 0.10074306830387522,
+  "mean_centered_pearson": -0.32174950205017744,
+  "mean_raw_mse": 0.01036964970622334,
+  "mean_centered_rmse": 0.09403081766806606,
   "P": 1837,
-  "G": 200
+  "G": 20
 }
