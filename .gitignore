@@ -1,0 +1,4 @@
+.DS_Store
+data/Homo_sapiens.GRCh38.110.gtf
+data/Homo_sapiens.GRCh38.dna.primary_assembly.fa
+data/Hs27_fibroblast_CRISPRa_mean_pop.h5ad
